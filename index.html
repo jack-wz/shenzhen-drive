@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1b1a33">
+<title>鹏城飞驰 · 深圳街头追逐</title>
+<meta name="description" content="低多边形深圳街区开车小游戏：深南大道、华强北、平安金融中心。闯红灯会被警察追，甩掉警察得分。">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%231b1a33'/><path d='M14 40h36l-4-12H18z' fill='%23ff8a3d'/><circle cx='22' cy='42' r='5' fill='%23fff'/><circle cx='42' cy='42' r='5' fill='%23fff'/></svg>">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1a33; touch-action: none;
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Hiragino Sans GB", sans-serif;
+    -webkit-user-select: none; user-select: none; color: #fff; }
+  canvas#game { display: block; width: 100vw; height: 100vh; }
+  .hud { position: fixed; pointer-events: none; text-shadow: 0 2px 4px rgba(0,0,0,.6); }
+  #scoreBox { top: max(12px, env(safe-area-inset-top)); left: max(14px, env(safe-area-inset-left)); }
+  #scoreBox .label { font-size: 12px; opacity: .8; letter-spacing: 2px; }
+  #score { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #best { font-size: 12px; opacity: .7; }
+  #wantedBox { top: max(12px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); text-align: right; }
+  #wantedBox .label { font-size: 12px; opacity: .8; letter-spacing: 2px; }
+  #stars { font-size: 30px; letter-spacing: 2px; line-height: 1; }
+  #stars span { color: rgba(255,255,255,.22); }
+  #stars span.on { color: #ffd23f; text-shadow: 0 0 10px rgba(255,190,40,.8), 0 2px 3px rgba(0,0,0,.6); }
+  #stars.blink span.on { animation: blink .5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  #bustWrap { margin-top: 6px; width: 150px; height: 8px; background: rgba(0,0,0,.45); border-radius: 4px; overflow: hidden; display: none; margin-left: auto; }
+  #bust { height: 100%; width: 0; background: linear-gradient(90deg, #ff4d4d, #ff1f6b); }
+  #bustLabel { font-size: 11px; color: #ff8a8a; display: none; margin-top: 2px; }
+  #escapeLabel { font-size: 12px; color: #9fe6ff; margin-top: 4px; min-height: 14px; }
+  #speedBox { bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); text-align: center; }
+  #speed { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  #speedBox .unit { font-size: 12px; opacity: .75; }
+  #msg { top: 26%; left: 50%; transform: translateX(-50%); font-size: 28px; font-weight: 800; white-space: nowrap;
+    opacity: 0; transition: opacity .25s; text-align: center; }
+  #msg.show { opacity: 1; }
+  #msg small { display: block; font-size: 15px; font-weight: 600; opacity: .9; }
+  #minimap { position: fixed; pointer-events: none; border-radius: 10px; border: 2px solid rgba(255,255,255,.35);
+    background: rgba(10,10,25,.6); left: max(14px, env(safe-area-inset-left)); width: 168px; height: 118px; }
+  body:not(.touch) #minimap { bottom: max(16px, env(safe-area-inset-bottom)); }
+  body.touch #minimap { top: calc(max(12px, env(safe-area-inset-top)) + 72px); width: 132px; height: 93px; }
+  #muteBtn { position: fixed; pointer-events: auto; right: max(14px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom));
+    width: 40px; height: 40px; border-radius: 20px; border: 0; background: rgba(0,0,0,.4); color: #fff; font-size: 18px; cursor: pointer; }
+  body.touch #muteBtn { bottom: auto; right: auto; left: 50%; transform: translateX(-50%); top: max(10px, env(safe-area-inset-top)); width: 36px; height: 36px; font-size: 16px; }
+
+  /* touch controls */
+  #touch { display: none; }
+  body.touch #touch { display: block; }
+  .tbtn { position: fixed; pointer-events: auto; touch-action: none; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,.16); border: 2px solid rgba(255,255,255,.4); color: #fff; font-weight: 800; font-size: 22px;
+    backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+  .tbtn.active { background: rgba(255,170,60,.55); border-color: #ffc46b; }
+  #tLeft  { left: max(18px, env(safe-area-inset-left)); bottom: max(26px, env(safe-area-inset-bottom)); width: 84px; height: 84px; }
+  #tRight { left: calc(max(18px, env(safe-area-inset-left)) + 98px); bottom: max(26px, env(safe-area-inset-bottom)); width: 84px; height: 84px; }
+  #tGas   { right: max(18px, env(safe-area-inset-right)); bottom: max(26px, env(safe-area-inset-bottom)); width: 96px; height: 96px; font-size: 18px; }
+  #tBrake { right: calc(max(18px, env(safe-area-inset-right)) + 108px); bottom: max(22px, env(safe-area-inset-bottom)); width: 74px; height: 74px; font-size: 15px; }
+  body.touch #speedBox { bottom: max(20px, env(safe-area-inset-bottom)); }
+
+  /* overlays */
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px;
+    background: radial-gradient(ellipse at center, rgba(40,25,70,.72), rgba(10,8,25,.9)); z-index: 10; }
+  .overlay.hidden { display: none; }
+  .panel { max-width: 520px; width: 100%; text-align: center; }
+  .title { font-size: 44px; font-weight: 900; letter-spacing: 4px; margin: 0;
+    background: linear-gradient(180deg, #ffe08a, #ff7b3d 55%, #ff3d77); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 4px 10px rgba(255,90,60,.35)); }
+  .subtitle { margin: 6px 0 18px; opacity: .85; letter-spacing: 3px; font-size: 15px; }
+  .rules { text-align: left; background: rgba(255,255,255,.07); border-radius: 12px; padding: 12px 16px; font-size: 14px; line-height: 1.75; }
+  .rules b { color: #ffd23f; }
+  .btn { margin-top: 18px; padding: 14px 44px; font-size: 20px; font-weight: 800; border: 0; border-radius: 30px; cursor: pointer; color: #2a1200;
+    background: linear-gradient(180deg, #ffd56b, #ff8a3d); box-shadow: 0 6px 20px rgba(255,120,50,.4); font-family: inherit; }
+  .btn:active { transform: scale(.97); }
+  .big { font-size: 40px; font-weight: 900; color: #ff5a6e; margin: 0 0 6px; }
+  .final { font-size: 18px; line-height: 1.8; }
+  .final b { font-size: 26px; color: #ffd23f; }
+  .note { margin-top: 12px; font-size: 11px; opacity: .5; }
+  #rotateHint { display: none; font-size: 13px; color: #9fe6ff; margin-top: 10px; }
+  @media (orientation: portrait) { body.touch #rotateHint { display: block; } }
+  @media (max-height: 460px) { .title { font-size: 30px; } .subtitle { margin-bottom: 8px; } .rules { font-size: 12px; line-height: 1.55; padding: 8px 12px; } .btn { margin-top: 10px; padding: 10px 36px; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="scoreBox" class="hud"><div class="label">得分</div><div id="score">0</div><div id="best">最高 0</div></div>
+<div id="wantedBox" class="hud">
+  <div class="label">通缉等级</div>
+  <div id="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+  <div id="escapeLabel"></div>
+  <div id="bustWrap"><div id="bust"></div></div>
+  <div id="bustLabel">警察正在逼停你！</div>
+</div>
+<div id="speedBox" class="hud"><div id="speed">0</div><div class="unit">km/h</div></div>
+<div id="msg" class="hud"></div>
+<canvas id="minimap"></canvas>
+<button id="muteBtn" title="声音 (M)">🔊</button>
+
+<div id="touch">
+  <div class="tbtn" id="tLeft" data-k="left">◀</div>
+  <div class="tbtn" id="tRight" data-k="right">▶</div>
+  <div class="tbtn" id="tBrake" data-k="down">刹车<br>倒车</div>
+  <div class="tbtn" id="tGas" data-k="up">油门</div>
+</div>
+
+<div id="startScreen" class="overlay">
+  <div class="panel">
+    <h1 class="title">鹏城飞驰</h1>
+    <div class="subtitle">深圳街头追逐 · 低多边形版</div>
+    <div class="rules">
+      🚗 在深南大道、华强北、平安金融中心一带自由开车<br>
+      🚨 <b>闯红灯</b>或<b>撞到别的车</b>会被通缉，警车开始追你<br>
+      ⭐ 犯事越多星级越高、警车越多；离开警察视线一段时间就算<b>甩掉</b>，按星级加分<br>
+      ⛔ 被警车贴身逼停就算<b>失败</b><br>
+      <span id="ctrlHint">⌨️ 方向键 / WASD 驾驶，空格刹车，M 静音</span>
+    </div>
+    <div id="rotateHint">📱 横屏玩体验更好</div>
+    <button class="btn" id="startBtn">开始游戏</button>
+    <div class="note">原创同人小游戏，地标造型为示意，与任何商业游戏无关</div>
+  </div>
+</div>
+
+<div id="overScreen" class="overlay hidden">
+  <div class="panel">
+    <div class="big">被捕了！</div>
+    <div class="final">本局得分 <b id="finalScore">0</b><br><span id="finalBest"></span><br><span id="finalStats"></span></div>
+    <button class="btn" id="againBtn">再来一局</button>
+  </div>
+</div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
